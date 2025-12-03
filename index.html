@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Inventaire IT - Mono Utilisateur</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>Inventaire IT — Mono Utilisateur</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Bootstrap -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
     body { background: #f7f8fb; }
@@ -19,7 +18,7 @@
 <div class="container">
   <h2 class="mb-3">📦 Inventaire IT — Version Mono</h2>
 
-  <!-- UTILISATEUR -->
+  <!-- UTILISATEUR + FILTRES -->
   <div class="mb-3 d-flex gap-2">
     <input id="userInput" class="form-control" placeholder="Utilisateur responsable">
     <input id="searchInput" class="form-control" placeholder="Recherche par nom">
@@ -31,11 +30,28 @@
   <!-- AJOUT ARTICLE -->
   <div class="card mb-3">
     <div class="card-body row g-2">
-      <input id="name" class="form-control col" placeholder="Nom">
-      <input id="category" class="form-control col" placeholder="Catégorie">
-      <input id="qty" type="number" class="form-control col" placeholder="Quantité">
-      <input id="location" class="form-control col" placeholder="Localisation">
-      <input id="state" class="form-control col" placeholder="État">
+      <input id="nameInput" class="form-control col" placeholder="Nom">
+      <select id="categoryInput" class="form-select col">
+        <option value="">Choisir catégorie</option>
+        <option>Souris</option>
+        <option>Clavier</option>
+        <option>Câble</option>
+        <option>PC</option>
+        <option>Écran</option>
+        <option>Onduleur</option>
+        <option>Autre</option>
+      </select>
+
+      <input id="qtyInput" type="number" class="form-control col" placeholder="Quantité">
+      <input id="locationInput" class="form-control col" placeholder="Localisation">
+      <select id="stateInput" class="form-select col">
+        <option value="">Choisir état</option>
+        <option>Neuf</option>
+        <option>Bon</option>
+        <option>Moyen</option>
+        <option>HS</option>
+      </select>
+
       <button class="btn btn-primary col" onclick="addItem()">Ajouter</button>
     </div>
   </div>
@@ -44,7 +60,7 @@
   <div class="mb-3 d-flex gap-2">
     <button class="btn btn-success" onclick="exportCSV()">Exporter CSV</button>
     <input type="file" id="importFile" accept=".csv" class="form-control">
-    <button class="btn btn-secondary" onclick="document.getElementById('historyModal').classList.add('show')">Historique</button>
+    <button class="btn btn-secondary" onclick="toggleHistory()">Historique</button>
   </div>
 
   <!-- TABLE -->
@@ -66,11 +82,12 @@
 </div>
 
 <!-- MODAL HISTORIQUE -->
-<div class="modal" tabindex="-1" id="historyModal">
+<div class="modal" tabindex="-1" id="historyModal" style="display:none;">
   <div class="modal-dialog modal-lg">
     <div class="modal-content p-3">
       <h5>Historique des mouvements</h5>
       <button class="btn btn-danger mb-2" onclick="clearHistory()">Vider historique</button>
+
       <table class="table table-sm">
         <thead>
           <tr>
@@ -83,28 +100,38 @@
         </thead>
         <tbody id="historyBody"></tbody>
       </table>
-      <button class="btn btn-secondary" onclick="document.getElementById('historyModal').classList.remove('show')">Fermer</button>
+
+      <button class="btn btn-secondary" onclick="toggleHistory()">Fermer</button>
     </div>
   </div>
 </div>
 
 <script>
+/* === STOCKAGE === */
 const STORAGE_KEY = "itInventory_mono";
 const HISTORY_KEY = "itInventory_history";
+
 let items = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
 let history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
 
+/* === ELEMENTS === */
 const tableBody = document.getElementById("tableBody");
 const historyBody = document.getElementById("historyBody");
 const searchInput = document.getElementById("searchInput");
 const categoryFilter = document.getElementById("categoryFilter");
 const userInput = document.getElementById("userInput");
 
+const nameInput = document.getElementById("nameInput");
+const categoryInput = document.getElementById("categoryInput");
+const qtyInput = document.getElementById("qtyInput");
+const locationInput = document.getElementById("locationInput");
+const stateInput = document.getElementById("stateInput");
+
 if(localStorage.getItem("currentUser")){
   userInput.value = localStorage.getItem("currentUser");
 }
 
-userInput.addEventListener("change", ()=>{
+userInput.addEventListener("input", ()=>{
   localStorage.setItem("currentUser", userInput.value.trim());
 });
 
@@ -130,24 +157,34 @@ function logMove(name, delta){
 }
 
 function addItem(){
+  if(!nameInput.value || !categoryInput.value || !qtyInput.value) return alert("Champs requis manquants");
+
   const item = {
     id: Date.now(),
-    name: name.value,
-    category: category.value,
-    qty: parseInt(qty.value),
-    location: location.value,
-    state: state.value
+    name: nameInput.value,
+    category: categoryInput.value,
+    qty: parseInt(qtyInput.value),
+    location: locationInput.value,
+    state: stateInput.value
   };
+
   items.push(item);
   save();
   logMove(item.name, item.qty);
+
+  nameInput.value = "";
+  categoryInput.value = "";
+  qtyInput.value = "";
+  locationInput.value = "";
+  stateInput.value = "";
+
   render();
 }
 
 function updateQty(id, value){
   const item = items.find(i => i.id === id);
   const delta = value - item.qty;
-  item.qty = value;
+  item.qty = parseInt(value);
   save();
   logMove(item.name, delta);
   render();
@@ -163,8 +200,7 @@ function render(){
   tableBody.innerHTML = "";
   categoryFilter.innerHTML = `<option value="">Toutes catégories</option>`;
 
-  const categories = [...new Set(items.map(i => i.category))];
-  categories.forEach(c =>{
+  [...new Set(items.map(i => i.category))].forEach(c =>{
     const opt = document.createElement("option");
     opt.value = c;
     opt.textContent = c;
@@ -188,6 +224,7 @@ function render(){
       <td>${item.state}</td>
       <td><button class="btn btn-danger btn-sm" onclick="removeItem(${item.id})">X</button></td>
     `;
+
     tableBody.appendChild(tr);
   });
 }
@@ -213,6 +250,11 @@ function clearHistory(){
     saveHistory();
     renderHistory();
   }
+}
+
+function toggleHistory(){
+  const modal = document.getElementById("historyModal");
+  modal.style.display = modal.style.display === "none" ? "block" : "none";
 }
 
 function exportCSV(){
